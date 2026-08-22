@@ -1,0 +1,9 @@
+title: US Census County Boundaries Archive
+description: Vintage-matched US Census county boundaries — raw TIGER/Line, waterline-clipped, and a multi-vintage parquet.
+author: R. Kyle Bocinsky
+url: "https://sustainable-fsa.com/census-counties/"
+baseurl: "/census-counties"
+
+remote_theme: jekyll/minima
+plugins:
+  - jekyll-remote-theme

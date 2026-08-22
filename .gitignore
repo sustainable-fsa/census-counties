@@ -1,0 +1,12 @@
+.DS_Store
+.Rproj.user
+.Rhistory
+.Rdata
+.httr-oauth
+.quarto
+.RData
+
+# Downloaded TIGER zips and derived parquet: large, and republished to S3.
+data-raw/
+data/
+census-counties.parquet
