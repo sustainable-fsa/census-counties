@@ -7,7 +7,6 @@ editor_options:
 ---
 
 [![GitHub Release](https://img.shields.io/github/v/release/sustainable-fsa/census-counties?label=GitHub%20Release&color=%239c27b0)](https://github.com/sustainable-fsa/census-counties)
-[![DOI](https://zenodo.org/badge/1342365396.svg)](https://zenodo.org/badge/latestdoi/1342365396)
 
 This repository archives **vintage-matched US Census county boundaries** — the boundaries against which the county-level determinations in the [Sustainable FSA](https://sustainable-fsa.com) project were computed. Each annual TIGER/Line vintage is archived as published, and again clipped to the same year's cartographic waterline for display.
 
@@ -16,7 +15,8 @@ This repository archives **vintage-matched US Census county boundaries** — the
 -   **Title:** Vintage-Matched US Census County Boundaries
 -   **Source:** U.S. Census Bureau TIGER/Line and Cartographic Boundary files
 -   **Format:** GeoParquet (ZSTD-13), EPSG:4269 (NAD83)
--   **Vintages:** 2000, 2009, 2010, and 2011–2025
+-   **Vintages:** 2000, 2009, 2010, and 2011–2025 (18 in all)
+-   **Extent:** 3,251 distinct counties and county equivalents, 58,182 county-vintages
 -   **Distribution Type:** Public archival for research and historical purposes
 
 ## 📂 Contents
@@ -26,18 +26,22 @@ This repository is a [BagIt](https://datatracker.ietf.org/doc/html/rfc8493) arch
 ```
 census-counties/
 ├── bagit.txt, bag-info.txt, manifest-sha256.txt
+├── census-counties.parquet                  every clipped vintage, stacked
+├── census-counties-manifest.json            path, size and sha256 of each file
 └── data/
     ├── raw/tl_<year>_us_county.zip          Census downloads, verbatim
     ├── parquet/<year>-counties.parquet      raw TIGER/Line
-    └── clipped/<year>-counties.parquet      cut at that vintage's waterline
+    ├── clipped/<year>-counties.parquet      cut at that vintage's waterline
+    └── quality/geometry_validation.csv      what enforcing validity changed
 ```
 
--   [`data/parquet/<year>-counties.parquet`](https://data.sustainable-fsa.com/census-counties/) – raw TIGER/Line counties, exactly as Census published them
--   [`data/clipped/<year>-counties.parquet`](https://data.sustainable-fsa.com/census-counties/) – the same geometries, cut at that vintage's `cb` 500k waterline
--   [`census-counties.parquet`](https://data.sustainable-fsa.com/census-counties/census-counties.parquet) – every clipped vintage stacked into one file, one row per county per year
--   [`census-counties.R`](https://sustainable-fsa.com/census-counties/census-counties.R) – R script that builds all of it
--   [`census-counties-manifest.json`](https://data.sustainable-fsa.com/census-counties/census-counties-manifest.json) – path, size and sha256 for every archived file
--   [`_manifest.txt`](https://data.sustainable-fsa.com/census-counties/_manifest.txt) – flat index of every file in the S3-hosted mirror
+-   [`data/parquet/<year>-counties.parquet`](https://data.sustainable-fsa.com/census-counties/) – raw TIGER/Line counties, exactly as Census published them. 18 files, about 46 MB each.
+-   [`data/clipped/<year>-counties.parquet`](https://data.sustainable-fsa.com/census-counties/) – the same geometries, cut at that vintage's `cb` 500k waterline. About 46 MB each.
+-   [`census-counties.parquet`](https://data.sustainable-fsa.com/census-counties/census-counties.parquet) – all 18 clipped vintages in one file, 58,182 rows, sorted by `fips` then `year`. 107 MB.
+-   [`data/quality/geometry_validation.csv`](https://data.sustainable-fsa.com/census-counties/data/quality/geometry_validation.csv) – a per-county record of every geometry the build altered while enforcing validity.
+-   [`_manifest.txt`](https://data.sustainable-fsa.com/census-counties/_manifest.txt) – flat index of every file in the S3-hosted mirror.
+
+`census-counties.parquet` is sorted by `fips` then `year` so a county's whole history is contiguous. Reading one vintage is better served by that vintage's own file in `data/clipped/`.
 
 ## 🧾 Field Descriptions
 
@@ -49,7 +53,7 @@ census-counties/
 | `County` | The county name |
 | `CountyLSAD` | The county name with its legal/statistical area description |
 | `year` | The TIGER/Line vintage the geometry comes from |
-| `mask_year` | The `cb` vintage used as the waterline clip (clipped and stacked forms only) |
+| `mask_year` | The `cb` vintage whose waterline clipped **that county** (clipped and stacked forms only). Normally one value per vintage; 2009 and 2011 carry two |
 
 ## 🌊 Why Both Raw and Clipped
 
@@ -70,52 +74,54 @@ Census does not publish one for every vintage. Measured against `www2.census.gov
 | 2014–2025 | `GENZ<year>/shp/cb_<year>_us_county_500k.zip` |
 | 2000, 2009, 2011, 2012 | none published |
 
-Those four vintages fall back to the nearest available year, and the substitution is recorded per row in `mask_year` — the reader can see which coastline was used rather than having to reconstruct it.
+Those four vintages fall back to the nearest available year, recorded per row in `mask_year`, so a reader can see which coastline was used rather than reconstruct it.
 
-The mask only ever changes the coast. Measured on an interior county, clipping to `cb` 5m and to `cb` 500k produced byte-identical geometry: inland boundaries keep full TIGER detail either way.
+A `cb` vintage also need not cover every state its `tl` counterpart carries. `cb` 2010 is the only one without American Samoa, Guam, the Northern Marianas and the US Virgin Islands, and `tl` 2009 and `tl` 2011 carry all four and both fall back to it. The mask is therefore composite where it has to be: states the chosen `cb` misses are supplied from the nearest `cb` that has them, and `mask_year` is recorded **per county**. In `data/clipped/2009-counties.parquet` 3,221 rows carry `mask_year` 2010 and 13 carry 2013; every other vintage has a single value throughout.
 
-## 🔧 Processing Steps
+The mask only ever changes the coast. Inland boundaries keep full TIGER detail — clipping an interior county to `cb` 5m and to `cb` 500k gives byte-identical geometry, and landlocked counties come through at an area ratio of exactly 1.0.
 
-#### 1. Download each TIGER/Line vintage
+## 🔧 How It Is Built
 
--   2000, 2009 and 2010 come from decennial-specific TIGER paths; 2011 onward follow one URL pattern.
--   Downloads resume, so an interrupted run picks up where it stopped.
+[`census-counties.R`](census-counties.R) builds the whole archive:
 
-#### 2. Normalize the attribute schema
+1.  **Download** each TIGER/Line vintage. 2000, 2009 and 2010 come from decennial-specific paths; 2011 onward follow one URL pattern. Downloads resume.
+2.  **Normalize** the schema — `COUNTYFP00`, `COUNTYFP10` and `COUNTYFP` all map to one set of columns — repair validity under both spherical and planar geometry, and recombine each county with an s2 coverage union.
+3.  **Build the vintage's mask** by unioning that year's `cb` 500k counties in spherical geometry, dropping the artifact rings the union leaves behind, and supplying any missing state from the nearest `cb` that has it. The mask is checked for validity before anything is clipped with it.
+4.  **Clip** in a single `mapshaper` invocation (`-clip … remove-slivers -clean rewind`), repair anything left invalid, and re-clip any residual county in spherical geometry, where an intersection of two valid geometries cannot be invalid.
+5.  **Stack** every clipped vintage into `census-counties.parquet`.
+6.  **Publish** to S3 and CloudFront through the shared [`R/s3-archive.R`](R/s3-archive.R) helpers.
 
--   Column names differ by vintage — 2000 uses `COUNTYFP00`, 2010 uses `COUNTYFP10`, later years use `COUNTYFP`. Each is mapped to a single schema.
--   Repair topology with `sf::st_make_valid()`.
--   Write `data/parquet/<year>-counties.parquet`.
+## ✅ Geometry Validity
 
-#### 3. Clip to the vintage's waterline
+Every county in `data/clipped/` and in `census-counties.parquet` is valid under both spherical (s2) and planar (GEOS) geometry, asserted at build time rather than assumed. Counties in `data/parquet/` are s2-valid by construction.
 
--   Fetch that year's `cb` 500k counties via `tigris`, dissolve to a single national outline.
--   Intersect the raw geometries with that outline, keeping the areal part only — `sf::st_intersection()` can return a polygon plus a stray boundary line where the mask grazes an edge.
--   Recombine to one `MULTIPOLYGON` per county and record `mask_year`.
--   Write `data/clipped/<year>-counties.parquet`.
+Enforcing validity means altering geometry, so the archive records what it altered. [`data/quality/geometry_validation.csv`](https://data.sustainable-fsa.com/census-counties/data/quality/geometry_validation.csv) holds one row per county per build stage, written only where the geometry moved or where it arrived or left invalid — a county passed through untouched contributes no row, and its absence is the record. It accumulates across runs.
 
-#### 4. Stack the vintages
+| `stage` | What it records |
+|-------------------|-----------------------------------------------------|
+| `raw_repair` | What repair and the coverage union cost a county in `data/parquet/` |
+| `mask_repair` | A `cb` county the mask build had to repair before unioning |
+| `mask_fill_holes` | The mask itself: rings dropped, area returned, validity before and after |
+| `clip` | A county the clip broke. Ordinary clipping is not logged; a row here means `mapshaper` returned something invalid |
+| `clip_repair` | Which repair fixed it — `geos_make_valid`, `s2_rebuild`, `s2_union` — or `kept_as_is` |
+| `clip_s2_fallback` | A county re-clipped in spherical geometry because nothing else made it valid |
 
--   Concatenate every clipped vintage into `census-counties.parquet`, sorted by `year` then `fips`.
--   No deduplication — see below.
+| Column | Description |
+|-------------------|-----------------------------------------------------|
+| `year`, `fips` | The vintage, and the county — or `<mask>` for that vintage's clip mask |
+| `stage`, `method` | Which step of the build, and what it did |
+| `s2_valid_before` / `_after`, `s2_reason_before` / `_after` | Spherical validity and failure reason on both sides |
+| `geos_valid_before` / `_after`, `geos_reason_before` | Planar validity and reason. A ring one engine accepts the other can reject, so both are recorded |
+| `area_m2_before` / `_after`, `area_delta_m2` | Spherical area in square metres, and what the operation cost |
+| `area_ratio` | Planar area after ÷ before — the number the acceptance guard compares |
+| `n_vertices_`, `n_parts_`, `n_rings_` `before` / `_after` | Shape accounting |
+| `mask_year`, `build_date` | Which `cb` vintage supplied that county's waterline, and when the row was written |
 
-#### 5. Publish
-
--   Mirror `data/` to S3 and upload the stacked parquet, via the shared [`R/s3-archive.R`](R/s3-archive.R) helpers.
-
-## 🧮 Not Deduplicated
-
-`census-counties.parquet` stores every county in every vintage, even though **99.18% of vertices are unchanged between adjacent vintages** (measured 2012 → 2013: 834,662 of 841,535).
-
-Collapsing runs of identical geometry into `from`/`to` eras was tried and does not pay: over 2020 and 2021 it reduced 6,468 rows to 6,466. The clip mask moves each year, and `st_intersection()`/`st_make_valid()` re-node and reorder rings even where the shape is untouched, so byte comparison finds almost nothing. Recovering the saving would mean freezing a single mask across all vintages, or canonicalizing coordinates before hashing — both trade fidelity or complexity for space this archive does not need to save.
-
-## 🗺️ No Tiles, and No Projection
-
-The [LFP Explorer](https://github.com/sustainable-fsa/lfp-explorer) renders a dummy-Albers coordinate space that exists only so MapLibre can draw an Albers composite. That transform lives in exactly one place — [`data-tiles`](https://github.com/sustainable-fsa/data-tiles), `R/dummy-space.R` — because two implementations that drift misregister layers by up to 765 m with nothing on screen to show it. Vector tiles are built there, from this archive. This repository stays in real coordinate systems.
+No repair is accepted on its word: a candidate is taken only if it is valid **and** still holds at least 99.9% of the area it was handed. `sf::st_make_valid()` has returned a county with its winding inverted and a negative area, which every validity check in the stack calls fine and which deletes the county the moment anything unions it.
 
 ## ☁️ Archive Hosting & Automated Publishing
 
-The parquet artifacts are mirrored to S3 and served via CloudFront at <https://data.sustainable-fsa.com/census-counties/> (browse the [archive listing](https://data.sustainable-fsa.com/census-counties/) or [`_manifest.txt`](https://data.sustainable-fsa.com/census-counties/_manifest.txt) for a flat index). They are **not** committed to git: the full archive is roughly 1.8 GB across all vintages.
+The parquet artifacts are mirrored to S3 and served via CloudFront at <https://data.sustainable-fsa.com/census-counties/> (browse the [archive listing](https://data.sustainable-fsa.com/census-counties/) or [`_manifest.txt`](https://data.sustainable-fsa.com/census-counties/_manifest.txt) for a flat index). They are **not** committed to git: the archive is about 3 GB, of which 1.3 GB is the verbatim Census downloads.
 
 Publishing is handled by [`census-counties.R`](census-counties.R) via the shared [`R/s3-archive.R`](R/s3-archive.R) helpers, and runs automatically in GitHub Actions ([`.github/workflows/census-counties.yaml`](.github/workflows/census-counties.yaml)) whenever the script or workflow changes, or on manual dispatch. The workflow authenticates to AWS via GitHub OIDC (no long-lived credentials stored in the repo), re-renders this README, and commits it back to git only if the rendered output changed.
 
@@ -126,13 +132,11 @@ Rscript census-counties.R                               # all vintages, publish
 VINTAGES=2020,2021 PUBLISH=0 Rscript census-counties.R  # two vintages, local only
 ```
 
-Nothing is reprocessed unless necessary. Following the `usdm` archive, **membership in the S3 listing** — not a local file, and not a full download — decides whether a vintage already exists. A weekly run that finds nothing new costs one list call plus a HEAD request per candidate vintage, and publishes nothing; it exits through `gate_skip()`. Only when Census posts a new TIGER vintage does a run pull the archive, build, restack and upload, which happens about once a year.
+Nothing is reprocessed unless necessary: membership in the S3 listing, not a local file, decides whether a vintage already exists. A run that finds nothing new costs one list call plus a HEAD request per candidate vintage and publishes nothing. The weekly schedule exists because TIGER's release date moves — checking is nearly free, so a new vintage is picked up the week it appears rather than whenever someone remembers to look.
 
-The weekly schedule exists because TIGER's release date moves. Checking is nearly free, so the archive notices a new vintage the week it appears rather than whenever someone remembers to look.
+## 📍 Quick Start
 
-## 📍 Quick Start: Compare two vintages in R
-
-This snippet loads one clipped vintage from the archive and maps it, shading each state so county structure is visible.
+Load a clipped vintage straight from the archive and map it, shading each state so county structure is visible.
 
 ```{r example, message=FALSE, warning=FALSE, fig.align = 'center', dpi=300, fig.path = './'}
 library(sf)
