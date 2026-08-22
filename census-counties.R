@@ -161,6 +161,12 @@ if (publish &&
     all(paste0("data/clipped/", names(tl_urls), "-counties.parquet") %in% archived)) {
   gate_skip(paste0("All ", length(tl_urls),
                    " vintages already archived; nothing to build."))
+
+  ## Render anyway. The data are unchanged but README.Rmd may not be, and once
+  ## every vintage is archived this is the only path a docs-only edit has to
+  ## reach README.md. Quick Start reads the CDN, which is already published.
+  rmarkdown::render("README.Rmd")
+
   quit(save = "no", status = 0)
 }
 
