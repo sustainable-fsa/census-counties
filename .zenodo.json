@@ -1,0 +1,20 @@
+{
+  "upload_type": "dataset",
+  "title": "Vintage-Matched US Census County Boundaries (Sustainable FSA Archive)",
+  "creators": [
+    {
+      "name": "U.S. Census Bureau"
+    },
+    {
+      "name": "Bocinsky, R. Kyle",
+      "affiliation": "Montana Climate Office, University of Montana"
+    }
+  ],
+  "keywords": [
+    "USDA",
+    "FSA",
+    "drought",
+    "Livestock Forage Disaster Program"
+  ],
+  "license": "cc-zero"
+}

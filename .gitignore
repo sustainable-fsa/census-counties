@@ -6,7 +6,8 @@
 .quarto
 .RData
 
-# Downloaded TIGER zips and derived parquet: large, and republished to S3.
-data-raw/
-data/
+# S3-hosted data (archive of record: https://data.sustainable-fsa.com/census-counties/)
+census-counties/
 census-counties.parquet
+census-counties-manifest.json
+census-counties.html

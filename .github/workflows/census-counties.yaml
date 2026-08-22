@@ -1,0 +1,77 @@
+# Canonical archive-update workflow (sustainable-fsa S3 migration).
+#
+# Runs weekly to notice a new TIGER/Line vintage the week Census posts it. The
+# script discovers vintages by HEAD request and skips any whose parquet is
+# already in the archive, so a quiet week costs a handful of requests and
+# publishes nothing. Only a genuinely new vintage triggers processing, a rebuild
+# of the stacked parquet, and an upload.
+name: update
+run-name: Update the census-counties archive → S3
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Thursdays, 15:30 UTC — after the USDM cascade, so the two archives are not
+    # competing for the same runner minutes.
+    - cron: '30 15 * * 4'
+  push:
+    branches: [main]
+    paths: ['**.R', '.github/workflows/**']
+
+permissions:
+  id-token: write
+  contents: write  # commit-back of rendered README
+
+concurrency:
+  group: s3-archive-${{ github.repository }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash -l {0}
+
+jobs:
+  update:
+    runs-on: macos-latest
+    timeout-minutes: 350
+    env:
+      S3_BUCKET: sustainable-fsa
+      S3_PREFIX: census-counties
+      AWS_REGION: us-west-2
+      CLOUDFRONT_DISTRIBUTION_ID: E1BNL6ONVN84RI
+      CLOUDFRONT_BASE: https://data.sustainable-fsa.com
+    steps:
+      - uses: mt-climate-office/actions/setup-geospatial@v1
+
+      - name: Configure AWS credentials (GitHub OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::202533506375:role/sustainable-fsa-github-actions
+          aws-region: us-west-2
+          role-duration-seconds: 14400
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Update archive
+        run: Rscript census-counties.R
+
+      # Commit the freshly rendered README (and only it) back to git.
+      # README.md text changes only when the data change, so no-op runs
+      # skip the commit; PNG byte-noise alone never triggers one.
+      - name: Commit refreshed README
+        run: |
+          if git diff --quiet -- README.md; then
+            echo "README unchanged; skipping commit."
+            exit 0
+          fi
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md example-1.png
+          git commit -m 'Update Archive'
+          if ! git pull --rebase --autostash origin main; then
+            git rebase --abort || true
+            echo "::notice::README render superseded by a concurrent run; skipping commit."
+            exit 0
+          fi
+          git push
