@@ -1,6 +1,7 @@
 
 [![GitHub
 Release](https://img.shields.io/github/v/release/sustainable-fsa/census-counties?label=GitHub%20Release&color=%239c27b0)](https://github.com/sustainable-fsa/census-counties)
+[![DOI](https://zenodo.org/badge/1342365396.svg)](https://zenodo.org/badge/latestdoi/1342365396)
 
 This repository archives **vintage-matched US Census county boundaries**
 — the boundaries against which the county-level determinations in the
@@ -263,6 +264,8 @@ If you use this data in published work, please cite:
 > Bocinsky, Montana Climate Office, University of Montana. Sustainable
 > FSA project. Accessed YYYY-MM-DD.
 > <https://sustainable-fsa.com/census-counties/>
+>
+> DOI: <https://doi.org/10.5281/zenodo.22059330>
 
 Machine-readable metadata are in [`CITATION.cff`](CITATION.cff);
 GitHub’s **Cite this repository** button (top right of the repo page)
