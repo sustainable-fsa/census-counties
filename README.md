@@ -214,7 +214,9 @@ finds nothing new costs one list call plus a HEAD request per candidate
 vintage and publishes nothing. The weekly schedule exists because
 TIGER’s release date moves — checking is nearly free, so a new vintage
 is picked up the week it appears rather than whenever someone remembers
-to look.
+to look. A vintage from 2014 on is built only once its own cb 500k file
+exists too; Census posts cb a few months after TIGER/Line, and clipping
+with a neighbouring year’s coastline would be archived permanently.
 
 ## 📍 Quick Start
 
