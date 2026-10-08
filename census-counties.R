@@ -141,6 +141,26 @@ tl_urls <-
   ) %>%
   .[purrr::map_lgl(., url_exists)]
 
+## Census posts cb a few months after tl. A vintage from 2014 on waits for its
+## own cb rather than borrowing a neighbour's: the S3 listing decides what is
+## built, so a fallback clip would be archived for good and never redone.
+cb_pending <-
+  names(tl_urls) %>%
+  as.integer() %>%
+  purrr::keep(~ .x >= 2014L) %>%
+  purrr::discard(~ paste0("data/clipped/", .x, "-counties.parquet") %in% archived) %>%
+  purrr::discard(\(x){
+    url_exists(paste0("https://www2.census.gov/geo/tiger/GENZ", x,
+                      "/shp/cb_", x, "_us_county_500k.zip"))
+  }) %>%
+  as.character()
+
+if (length(cb_pending)) {
+  message("tl published but cb not yet, deferring: ",
+          paste(cb_pending, collapse = ", "))
+  tl_urls <- tl_urls[setdiff(names(tl_urls), cb_pending)]
+}
+
 ## VINTAGES=2000,2020 narrows a run to those vintages, which is the difference
 ## between iterating on one and rebuilding eighteen.
 vintages <-

@@ -133,7 +133,7 @@ Rscript census-counties.R                               # all vintages, publish
 VINTAGES=2020,2021 PUBLISH=0 Rscript census-counties.R  # two vintages, local only
 ```
 
-Nothing is reprocessed unless necessary: membership in the S3 listing, not a local file, decides whether a vintage already exists. A run that finds nothing new costs one list call plus a HEAD request per candidate vintage and publishes nothing. The weekly schedule exists because TIGER's release date moves — checking is nearly free, so a new vintage is picked up the week it appears rather than whenever someone remembers to look.
+Nothing is reprocessed unless necessary: membership in the S3 listing, not a local file, decides whether a vintage already exists. A run that finds nothing new costs one list call plus a HEAD request per candidate vintage and publishes nothing. The weekly schedule exists because TIGER's release date moves — checking is nearly free, so a new vintage is picked up the week it appears rather than whenever someone remembers to look. A vintage from 2014 on is built only once its own cb 500k file exists too; Census posts cb a few months after TIGER/Line, and clipping with a neighbouring year's coastline would be archived permanently.
 
 ## 📍 Quick Start
 
