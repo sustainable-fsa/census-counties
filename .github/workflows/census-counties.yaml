@@ -75,3 +75,17 @@ jobs:
             exit 0
           fi
           git push
+
+  # GitHub disables scheduled workflows in public repos after 60 days without
+  # repo activity, and this workflow commits only when the rendered README changes. Re-enabling it via the API resets that timer without
+  # needing a commit.
+  keepalive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Reset the inactivity timer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/census-counties.yaml/enable"
